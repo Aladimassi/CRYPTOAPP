@@ -3,10 +3,10 @@ FastAPI Backend for ML Models
 ==============================
 Provides REST API endpoints for:
 1. Crypto Price Predictions (Bitcoin & Ethereum)
-2. Client Segmentation Analysis
+2. RAG Chat Assistant (Q&A about models)
 
 Author: ML Analytics Team
-Date: 2025-12-04
+Date: 2025-12-13
 """
 
 from fastapi import FastAPI, HTTPException
@@ -20,13 +20,13 @@ from pathlib import Path
 # Add parent directories to path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from routers import crypto, clients
+from routers import crypto, rag, sentiment
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="ML Analytics API",
-    description="REST API for Crypto Predictions and Client Segmentation",
-    version="1.0.0",
+    title="Data Minds API",
+    description="REST API for Crypto Predictions, Sentiment Analysis and RAG Chat Assistant",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -34,7 +34,7 @@ app = FastAPI(
 # CORS middleware for React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # React dev servers
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:5173"],  # React dev servers
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,18 +42,19 @@ app.add_middleware(
 
 # Include routers
 app.include_router(crypto.router, prefix="/api/crypto", tags=["Crypto Predictions"])
-app.include_router(clients.router, prefix="/api/clients", tags=["Client Segmentation"])
+app.include_router(rag.router, prefix="/api/rag", tags=["RAG Chat Assistant"])
+app.include_router(sentiment.router, prefix="/api/sentiment", tags=["Sentiment Analysis"])
 
 @app.get("/")
 async def root():
     """Root endpoint - API information"""
     return {
-        "name": "ML Analytics API",
-        "version": "1.0.0",
+        "name": "Data Minds API",
+        "version": "2.0.0",
         "status": "operational",
         "endpoints": {
             "crypto": "/api/crypto",
-            "clients": "/api/clients",
+            "rag": "/api/rag",
             "docs": "/docs",
             "health": "/health"
         },
@@ -68,10 +69,15 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "services": {
             "crypto_model": "loaded",
-            "client_model": "loaded"
+            "rag_assistant": "loaded"
         }
     }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    print("\n" + "="*60)
+    print("  Starting Data Minds API Server...")
+    print("  URL: http://127.0.0.1:8000")
+    print("  Docs: http://127.0.0.1:8000/docs")
+    print("="*60 + "\n")
+    uvicorn.run(app, host="127.0.0.1", port=8000)

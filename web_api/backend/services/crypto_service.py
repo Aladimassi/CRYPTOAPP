@@ -11,6 +11,7 @@ import pickle
 from datetime import datetime, timedelta
 import yfinance as yf
 import numpy as np
+import threading
 
 # Add project paths
 project_root = Path(__file__).parent.parent.parent.parent
@@ -21,6 +22,7 @@ class CryptoService:
     def __init__(self):
         self.models_path = crypto_path / "models"
         self.output_path = crypto_path / "output"
+        self._refresh_lock = threading.Lock()  # Verrou pour éviter écritures simultanées
         self.load_models()
         
     def load_models(self):
@@ -145,32 +147,42 @@ class CryptoService:
     
     def refresh_predictions(self):
         """Refresh predictions and save to history"""
-        predictions = self.get_current_predictions()
-        
-        # Save to CSV
-        history_file = self.output_path / 'predictions_history.csv'
-        rows = []
-        for symbol, data in predictions.items():
-            rows.append({
-                'date': data['timestamp'],
-                'symbol': symbol,
-                'price': data['current_price'],
-                'prediction': data['next_day_prediction'],
-                'signal': data['signal'],
-                'confidence': data['confidence']
-            })
-        
-        df_new = pd.DataFrame(rows)
-        
-        if history_file.exists():
-            df_history = pd.read_csv(history_file)
-            df_history = pd.concat([df_history, df_new], ignore_index=True)
-            df_history = df_history.drop_duplicates(subset=['date', 'symbol'], keep='last')
-        else:
-            df_history = df_new
-        
-        df_history.to_csv(history_file, index=False)
-        return predictions
+        # Utiliser un verrou pour éviter les écritures simultanées
+        with self._refresh_lock:
+            predictions = self.get_current_predictions()
+            
+            # Save to CSV
+            history_file = self.output_path / 'predictions_history.csv'
+            rows = []
+            for symbol, data in predictions.items():
+                rows.append({
+                    'date': data['timestamp'],
+                    'symbol': symbol,
+                    'price': data['current_price'],
+                    'prediction': data['next_day_prediction'],
+                    'signal': data['signal'],
+                    'confidence': data['confidence']
+                })
+            
+            df_new = pd.DataFrame(rows)
+            
+            if history_file.exists():
+                try:
+                    df_history = pd.read_csv(history_file)
+                    # Check if the file is not empty
+                    if not df_history.empty:
+                        df_history = pd.concat([df_history, df_new], ignore_index=True)
+                        df_history = df_history.drop_duplicates(subset=['date', 'symbol'], keep='last')
+                    else:
+                        df_history = df_new
+                except (pd.errors.EmptyDataError, pd.errors.ParserError):
+                    # If file is corrupted or empty, start fresh
+                    df_history = df_new
+            else:
+                df_history = df_new
+            
+            df_history.to_csv(history_file, index=False)
+            return predictions
     
     def get_predictions_history(self, symbol=None, limit=30, days=None):
         """Get historical predictions"""
@@ -178,7 +190,12 @@ class CryptoService:
         if not history_file.exists():
             return []
         
-        df = pd.read_csv(history_file)
+        try:
+            df = pd.read_csv(history_file)
+            if df.empty:
+                return []
+        except (pd.errors.EmptyDataError, pd.errors.ParserError):
+            return []
         
         if symbol:
             df = df[df['symbol'] == symbol]

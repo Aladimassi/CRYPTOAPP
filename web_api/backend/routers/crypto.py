@@ -31,7 +31,7 @@ class HistoricalPrediction(BaseModel):
     date: str
     symbol: str
     price: float
-    prediction: str
+    prediction: float  # Predicted price value
     signal: str
     confidence: float
 
